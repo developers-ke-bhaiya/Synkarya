@@ -3,7 +3,7 @@ import { io } from "socket.io-client";
 import Auth from "./Auth";
 
 // 🔥 IMPORTANT: अपना Render backend URL डाल
-const socket = io("https://synkarya-backend.onrender.com");
+const socket = io("https://synkarya.onrender.com");
 
 let peer = null;
 let localStream = null;

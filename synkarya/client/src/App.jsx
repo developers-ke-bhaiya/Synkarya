@@ -2,7 +2,8 @@ import { useState, useEffect, useRef } from "react";
 import { io } from "socket.io-client";
 import Auth from "./Auth";
 
-const socket = io(window.location.origin);
+// 🔥 IMPORTANT: Render backend URL डाल
+const socket = io("https://synkarya.onrender.com");
 
 let peer = null;
 let localStream = null;
@@ -17,6 +18,7 @@ export default function App() {
   const localVideoRef = useRef(null);
   const remoteVideoRef = useRef(null);
 
+  // 🔥 CLEANUP
   const cleanUp = () => {
     setInCall(false);
 
@@ -46,7 +48,7 @@ export default function App() {
       setRoomId(data.roomId);
     });
 
-    // RECEIVER
+    // 🔥 RECEIVER
     socket.on("offer", async (data) => {
       setInCall(true);
 
@@ -65,7 +67,7 @@ export default function App() {
       socket.emit("answer", { roomId, answer });
     });
 
-    // CALLER
+    // 🔥 CALLER
     socket.on("answer", async (data) => {
       if (peer) {
         await peer.setRemoteDescription(
@@ -96,12 +98,11 @@ export default function App() {
     localVideoRef.current.srcObject = localStream;
   };
 
-  // 🔥 FINAL PEER (TURN ADDED)
+  // 🔥 FINAL PEER (TURN FIX)
   const createPeer = () => {
     const pc = new RTCPeerConnection({
       iceServers: [
         { urls: "stun:stun.l.google.com:19302" },
-
         {
           urls: "turn:openrelay.metered.ca:80",
           username: "openrelayproject",
@@ -140,6 +141,7 @@ export default function App() {
     return pc;
   };
 
+  // 🔥 CALL START
   const sendSync = (targetId) => {
     const room = socket.id + "-" + targetId;
 
@@ -155,6 +157,7 @@ export default function App() {
     });
   };
 
+  // 🔥 ACCEPT CALL
   const acceptRequest = async () => {
     socket.emit("join_room", roomId);
 
@@ -171,16 +174,19 @@ export default function App() {
     socket.emit("offer", { roomId, offer });
   };
 
+  // 🎤 MIC
   const toggleMic = () => {
     const t = localStream?.getAudioTracks()[0];
     if (t) t.enabled = !t.enabled;
   };
 
+  // 📷 CAMERA
   const toggleCamera = () => {
     const t = localStream?.getVideoTracks()[0];
     if (t) t.enabled = !t.enabled;
   };
 
+  // 🖥 SCREEN SHARE
   const startScreenShare = async () => {
     const screenStream = await navigator.mediaDevices.getDisplayMedia({
       video: true,
@@ -195,6 +201,7 @@ export default function App() {
     if (sender) sender.replaceTrack(screenTrack);
   };
 
+  // ❌ END CALL
   const endCall = () => {
     socket.emit("end_call", { roomId });
     cleanUp();
@@ -207,6 +214,7 @@ export default function App() {
       ) : (
         <div className="flex h-screen bg-black text-white">
 
+          {/* USERS */}
           <div className="w-64 p-4 bg-gray-900">
             {Object.entries(users).map(([id, name]) => (
               <div
@@ -219,12 +227,19 @@ export default function App() {
             ))}
           </div>
 
+          {/* INCOMING */}
           {incomingRequest && (
             <div className="fixed inset-0 flex items-center justify-center">
-              <button onClick={acceptRequest}>Accept Call</button>
+              <button
+                onClick={acceptRequest}
+                className="bg-green-500 px-4 py-2"
+              >
+                Accept Call
+              </button>
             </div>
           )}
 
+          {/* CALL UI */}
           {inCall && (
             <div className="fixed inset-0 flex flex-col items-center justify-center bg-black">
 
@@ -237,7 +252,10 @@ export default function App() {
                 <button onClick={startScreenShare}>Share Screen</button>
               </div>
 
-              <button onClick={endCall} className="mt-4 bg-red-500 px-4 py-2">
+              <button
+                onClick={endCall}
+                className="mt-4 bg-red-500 px-4 py-2"
+              >
                 End Call
               </button>
             </div>

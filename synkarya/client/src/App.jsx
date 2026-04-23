@@ -2,8 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { io } from "socket.io-client";
 import Auth from "./Auth";
 
-// 🔥 IMPORTANT: अपना Render backend URL डाल
-const socket = io("https://synkarya.onrender.com");
+const socket = io("https://synkarya-backend.onrender.com");
 
 let peer = null;
 let localStream = null;
@@ -18,7 +17,7 @@ export default function App() {
   const localVideoRef = useRef(null);
   const remoteVideoRef = useRef(null);
 
-  // 🔥 CLEANUP
+  // 🔥 CLEANUP (CAMERA LIGHT FIX)
   const cleanUp = () => {
     setInCall(false);
 
@@ -48,17 +47,16 @@ export default function App() {
       setRoomId(data.roomId);
     });
 
-    // 🔥 RECEIVER
-    socket.on("offer", async (data) => {
-      setInCall(true);
+    // 🔥 RECEIVE OFFER
+    socket.on("offer", async ({ offer }) => {
+      console.log("📥 OFFER RECEIVED");
 
-      if (!peer) {
-        await startCall();
-        peer = createPeer();
-      }
+      await startCall();
+
+      peer = createPeer();
 
       await peer.setRemoteDescription(
-        new RTCSessionDescription(data.offer)
+        new RTCSessionDescription(offer)
       );
 
       const answer = await peer.createAnswer();
@@ -67,18 +65,21 @@ export default function App() {
       socket.emit("answer", { roomId, answer });
     });
 
-    // 🔥 CALLER
-    socket.on("answer", async (data) => {
+    // 🔥 RECEIVE ANSWER
+    socket.on("answer", async ({ answer }) => {
+      console.log("📥 ANSWER RECEIVED");
+
       if (peer) {
         await peer.setRemoteDescription(
-          new RTCSessionDescription(data.answer)
+          new RTCSessionDescription(answer)
         );
       }
     });
 
-    socket.on("ice-candidate", (data) => {
-      if (peer) {
-        peer.addIceCandidate(new RTCIceCandidate(data.candidate));
+    // 🔥 ICE
+    socket.on("ice-candidate", ({ candidate }) => {
+      if (peer && candidate) {
+        peer.addIceCandidate(new RTCIceCandidate(candidate));
       }
     });
 
@@ -98,20 +99,17 @@ export default function App() {
     localVideoRef.current.srcObject = localStream;
   };
 
-  // 🔥 TURN FIX
+  // 🔥 FINAL ICE FIX (IMPORTANT)
   const createPeer = () => {
     const pc = new RTCPeerConnection({
       iceServers: [
         { urls: "stun:stun.l.google.com:19302" },
+
+        // ✅ Working TURN (important for internet)
         {
-          urls: "turn:openrelay.metered.ca:80",
-          username: "openrelayproject",
-          credential: "openrelayproject",
-        },
-        {
-          urls: "turn:openrelay.metered.ca:443",
-          username: "openrelayproject",
-          credential: "openrelayproject",
+          urls: "turn:relay1.expressturn.com:3478",
+          username: "ef9Z1XQWQ4A3K7W9",
+          credential: "Fv7wZx8gQh",
         },
       ],
     });
@@ -120,27 +118,36 @@ export default function App() {
       pc.addTrack(track, localStream);
     });
 
-    pc.ontrack = (e) => {
-      console.log("REMOTE STREAM");
-      remoteVideoRef.current.srcObject = e.streams[0];
+    pc.ontrack = (event) => {
+      console.log("🎥 REMOTE STREAM RECEIVED");
+      remoteVideoRef.current.srcObject = event.streams[0];
     };
 
-    pc.onicecandidate = (e) => {
-      if (e.candidate) {
+    pc.onicecandidate = (event) => {
+      if (event.candidate) {
         socket.emit("ice-candidate", {
           roomId,
-          candidate: e.candidate,
+          candidate: event.candidate,
         });
       }
     };
 
     pc.onconnectionstatechange = () => {
       console.log("STATE:", pc.connectionState);
+
+      if (pc.connectionState === "failed") {
+        console.log("❌ CONNECTION FAILED");
+      }
+
+      if (pc.connectionState === "connected") {
+        console.log("✅ CONNECTED");
+      }
     };
 
     return pc;
   };
 
+  // 🔥 CALL START
   const sendSync = (targetId) => {
     const room = socket.id + "-" + targetId;
 
@@ -156,6 +163,7 @@ export default function App() {
     });
   };
 
+  // 🔥 ACCEPT CALL
   const acceptRequest = async () => {
     socket.emit("join_room", roomId);
 
@@ -173,13 +181,13 @@ export default function App() {
   };
 
   const toggleMic = () => {
-    const t = localStream?.getAudioTracks()[0];
-    if (t) t.enabled = !t.enabled;
+    const track = localStream?.getAudioTracks()[0];
+    if (track) track.enabled = !track.enabled;
   };
 
   const toggleCamera = () => {
-    const t = localStream?.getVideoTracks()[0];
-    if (t) t.enabled = !t.enabled;
+    const track = localStream?.getVideoTracks()[0];
+    if (track) track.enabled = !track.enabled;
   };
 
   const startScreenShare = async () => {
@@ -208,6 +216,7 @@ export default function App() {
       ) : (
         <div className="flex h-screen bg-black text-white">
 
+          {/* USERS */}
           <div className="w-64 p-4 bg-gray-900">
             {Object.entries(users).map(([id, name]) => (
               <div
@@ -220,6 +229,7 @@ export default function App() {
             ))}
           </div>
 
+          {/* INCOMING */}
           {incomingRequest && (
             <div className="fixed inset-0 flex items-center justify-center">
               <button
@@ -231,6 +241,7 @@ export default function App() {
             </div>
           )}
 
+          {/* CALL UI */}
           {inCall && (
             <div className="fixed inset-0 flex flex-col items-center justify-center bg-black">
 

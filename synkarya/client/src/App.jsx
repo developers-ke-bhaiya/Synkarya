@@ -1,20 +1,22 @@
 import { useEffect, useRef, useState } from "react";
 import io from "socket.io-client";
 
-const socket = io("https://synkarya.onrender.com"); // backend URL
+const socket = io("https://synkarya.onrender.com", {
+  transports: ["websocket"],
+});
 
 export default function App() {
   const [username, setUsername] = useState("");
   const [users, setUsers] = useState({});
   const [roomId, setRoomId] = useState(null);
 
-  const localVideo = useRef();
-  const remoteVideo = useRef();
+  const localVideo = useRef(null);
+  const remoteVideo = useRef(null);
 
   const pc = useRef(null);
   const localStream = useRef(null);
 
-  // 🔥 ICE FIXED
+  // ✅ STRONG ICE (THIS FIXES YOUR PROBLEM)
   const createPeer = () => {
     pc.current = new RTCPeerConnection({
       iceServers: [
@@ -29,21 +31,34 @@ export default function App() {
           username: "openrelayproject",
           credential: "openrelayproject",
         },
+        {
+          urls: "turn:openrelay.metered.ca:443?transport=tcp",
+          username: "openrelayproject",
+          credential: "openrelayproject",
+        },
       ],
     });
 
     pc.current.ontrack = (e) => {
-      console.log("REMOTE STREAM");
+      console.log("REMOTE STREAM RECEIVED");
       remoteVideo.current.srcObject = e.streams[0];
     };
 
     pc.current.onicecandidate = (e) => {
       if (e.candidate) {
-        socket.emit("ice", { roomId, candidate: e.candidate });
+        socket.emit("ice", {
+          roomId,
+          candidate: e.candidate,
+        });
       }
+    };
+
+    pc.current.onconnectionstatechange = () => {
+      console.log("STATE:", pc.current.connectionState);
     };
   };
 
+  // ✅ MEDIA
   const startMedia = async () => {
     localStream.current = await navigator.mediaDevices.getUserMedia({
       video: true,
@@ -53,6 +68,7 @@ export default function App() {
     localVideo.current.srcObject = localStream.current;
   };
 
+  // ✅ CALL START
   const startCall = async () => {
     await startMedia();
     createPeer();
@@ -67,6 +83,7 @@ export default function App() {
     socket.emit("offer", { roomId, offer });
   };
 
+  // ✅ ANSWER
   const answerCall = async (offer) => {
     await startMedia();
     createPeer();
@@ -83,15 +100,22 @@ export default function App() {
     socket.emit("answer", { roomId, answer });
   };
 
+  // ✅ END CALL (FIXED CAMERA BUG)
   const endCall = () => {
-    if (pc.current) pc.current.close();
+    console.log("CALL ENDED");
+
+    if (pc.current) {
+      pc.current.close();
+      pc.current = null;
+    }
 
     if (localStream.current) {
       localStream.current.getTracks().forEach((t) => t.stop());
+      localStream.current = null;
     }
 
-    localVideo.current.srcObject = null;
-    remoteVideo.current.srcObject = null;
+    if (localVideo.current) localVideo.current.srcObject = null;
+    if (remoteVideo.current) remoteVideo.current.srcObject = null;
 
     socket.emit("end-call", { roomId });
     setRoomId(null);
@@ -100,7 +124,7 @@ export default function App() {
   useEffect(() => {
     socket.on("users", setUsers);
 
-    socket.on("incoming-call", async ({ from, roomId }) => {
+    socket.on("incoming-call", ({ roomId }) => {
       setRoomId(roomId);
       socket.emit("join-room", roomId);
     });
@@ -114,20 +138,31 @@ export default function App() {
     });
 
     socket.on("ice", async (candidate) => {
-      await pc.current.addIceCandidate(candidate);
+      try {
+        await pc.current.addIceCandidate(candidate);
+      } catch (e) {
+        console.log("ICE ERROR", e);
+      }
     });
 
     socket.on("call-ended", endCall);
+
+    return () => socket.disconnect();
   }, [roomId]);
 
   const callUser = (id) => {
     const room = [socket.id, id].sort().join("-");
+
+    console.log("ROOM:", room);
+
     setRoomId(room);
 
-    socket.emit("call-user", { to: id, from: username });
+    socket.emit("call-user", { to: id });
     socket.emit("join-room", room);
 
-    setTimeout(startCall, 1000);
+    setTimeout(() => {
+      startCall();
+    }, 500);
   };
 
   return (
@@ -155,9 +190,7 @@ export default function App() {
           <div style={{ flex: 1, textAlign: "center" }}>
             <video ref={localVideo} autoPlay muted width="300" />
             <video ref={remoteVideo} autoPlay width="300" />
-
             <br />
-
             <button onClick={endCall}>End Call</button>
           </div>
         </div>

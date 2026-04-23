@@ -2,8 +2,8 @@ import { useState, useEffect, useRef } from "react";
 import { io } from "socket.io-client";
 import Auth from "./Auth";
 
-// 🔥 IMPORTANT: Render backend URL डाल
-const socket = io("https://synkarya.onrender.com");
+// 🔥 IMPORTANT: अपना Render backend URL डाल
+const socket = io("https://synkarya-backend.onrender.com");
 
 let peer = null;
 let localStream = null;
@@ -98,7 +98,7 @@ export default function App() {
     localVideoRef.current.srcObject = localStream;
   };
 
-  // 🔥 FINAL PEER (TURN FIX)
+  // 🔥 TURN FIX
   const createPeer = () => {
     const pc = new RTCPeerConnection({
       iceServers: [
@@ -141,13 +141,12 @@ export default function App() {
     return pc;
   };
 
-  // 🔥 CALL START
   const sendSync = (targetId) => {
     const room = socket.id + "-" + targetId;
 
     setRoomId(room);
 
-    socket.emit("join_room", room); // 🔥 IMPORTANT
+    socket.emit("join_room", room);
 
     setInCall(true);
 
@@ -157,7 +156,6 @@ export default function App() {
     });
   };
 
-  // 🔥 ACCEPT CALL
   const acceptRequest = async () => {
     socket.emit("join_room", roomId);
 
@@ -174,19 +172,16 @@ export default function App() {
     socket.emit("offer", { roomId, offer });
   };
 
-  // 🎤 MIC
   const toggleMic = () => {
     const t = localStream?.getAudioTracks()[0];
     if (t) t.enabled = !t.enabled;
   };
 
-  // 📷 CAMERA
   const toggleCamera = () => {
     const t = localStream?.getVideoTracks()[0];
     if (t) t.enabled = !t.enabled;
   };
 
-  // 🖥 SCREEN SHARE
   const startScreenShare = async () => {
     const screenStream = await navigator.mediaDevices.getDisplayMedia({
       video: true,
@@ -201,7 +196,6 @@ export default function App() {
     if (sender) sender.replaceTrack(screenTrack);
   };
 
-  // ❌ END CALL
   const endCall = () => {
     socket.emit("end_call", { roomId });
     cleanUp();
@@ -214,7 +208,6 @@ export default function App() {
       ) : (
         <div className="flex h-screen bg-black text-white">
 
-          {/* USERS */}
           <div className="w-64 p-4 bg-gray-900">
             {Object.entries(users).map(([id, name]) => (
               <div
@@ -227,7 +220,6 @@ export default function App() {
             ))}
           </div>
 
-          {/* INCOMING */}
           {incomingRequest && (
             <div className="fixed inset-0 flex items-center justify-center">
               <button
@@ -239,7 +231,6 @@ export default function App() {
             </div>
           )}
 
-          {/* CALL UI */}
           {inCall && (
             <div className="fixed inset-0 flex flex-col items-center justify-center bg-black">
 

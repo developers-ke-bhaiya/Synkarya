@@ -2,7 +2,10 @@ import { useState, useEffect, useRef } from "react";
 import { io } from "socket.io-client";
 import Auth from "./Auth";
 
-const socket = io("https://synkarya.onrender.com");
+// 🔥 FINAL BACKEND
+const socket = io("https://synkarya.onrender.com", {
+  transports: ["websocket"],
+});
 
 let peer = null;
 let localStream = null;
@@ -17,7 +20,7 @@ export default function App() {
   const localVideoRef = useRef(null);
   const remoteVideoRef = useRef(null);
 
-  // 🔥 CLEANUP (CAMERA LIGHT FIX)
+  // 🔥 CLEANUP (camera OFF fix)
   const cleanUp = () => {
     setInCall(false);
 
@@ -53,7 +56,7 @@ export default function App() {
 
       await startCall();
 
-      peer = createPeer();
+      if (!peer) peer = createPeer();
 
       await peer.setRemoteDescription(
         new RTCSessionDescription(offer)
@@ -96,16 +99,16 @@ export default function App() {
       audio: true,
     });
 
-    localVideoRef.current.srcObject = localStream;
+    if (localVideoRef.current) {
+      localVideoRef.current.srcObject = localStream;
+    }
   };
 
-  // 🔥 FINAL ICE FIX (IMPORTANT)
+  // 🔥 FINAL PEER FIX
   const createPeer = () => {
     const pc = new RTCPeerConnection({
       iceServers: [
         { urls: "stun:stun.l.google.com:19302" },
-
-        // ✅ Working TURN (important for internet)
         {
           urls: "turn:relay1.expressturn.com:3478",
           username: "ef9Z1XQWQ4A3K7W9",
@@ -118,9 +121,20 @@ export default function App() {
       pc.addTrack(track, localStream);
     });
 
+    // 🔥 CRITICAL FIX (REMOTE VIDEO)
     pc.ontrack = (event) => {
-      console.log("🎥 REMOTE STREAM RECEIVED");
-      remoteVideoRef.current.srcObject = event.streams[0];
+      console.log("🎥 REMOTE TRACK");
+
+      const stream = event.streams[0];
+
+      if (remoteVideoRef.current) {
+        remoteVideoRef.current.srcObject = stream;
+
+        // 🔥 FORCE PLAY
+        remoteVideoRef.current.onloadedmetadata = () => {
+          remoteVideoRef.current.play().catch(() => {});
+        };
+      }
     };
 
     pc.onicecandidate = (event) => {
@@ -134,14 +148,6 @@ export default function App() {
 
     pc.onconnectionstatechange = () => {
       console.log("STATE:", pc.connectionState);
-
-      if (pc.connectionState === "failed") {
-        console.log("❌ CONNECTION FAILED");
-      }
-
-      if (pc.connectionState === "connected") {
-        console.log("✅ CONNECTED");
-      }
     };
 
     return pc;
@@ -172,7 +178,7 @@ export default function App() {
 
     await startCall();
 
-    peer = createPeer();
+    if (!peer) peer = createPeer();
 
     const offer = await peer.createOffer();
     await peer.setLocalDescription(offer);
@@ -245,8 +251,20 @@ export default function App() {
           {inCall && (
             <div className="fixed inset-0 flex flex-col items-center justify-center bg-black">
 
-              <video ref={localVideoRef} autoPlay muted className="w-1/3" />
-              <video ref={remoteVideoRef} autoPlay className="w-1/3 mt-4" />
+              <video
+                ref={localVideoRef}
+                autoPlay
+                muted
+                playsInline
+                className="w-1/3"
+              />
+
+              <video
+                ref={remoteVideoRef}
+                autoPlay
+                playsInline
+                className="w-1/3 mt-4"
+              />
 
               <div className="flex gap-4 mt-4">
                 <button onClick={toggleMic}>Mic</button>
